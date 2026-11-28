@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (QApplication,QMainWindow,QPushButton,QLineEdit,QW
 import sys
 from PySide6.QtGui import QIcon
 from pathlib import Path
-from PySide6.QtCore import QSize
+from PySide6.QtCore import QSize,Qt
 import backend as sql
 
 iconPath=str(Path(__file__).resolve().parent.parent)
@@ -72,7 +72,7 @@ class MainWindow(QMainWindow):
         self.counter=1
 
     def reloadViewPage(self):
-        allTasks=sql.loadTasks(table='alltasks')
+        allTasks=sql.loadAllTasks()
         self.tasks.setRowCount(0)
         for row,objects in enumerate(allTasks):
             self.tasks.insertRow(row)
@@ -80,21 +80,21 @@ class MainWindow(QMainWindow):
             doneBtn.clicked.connect(lambda _,b=doneBtn: self.taskCompleted(b))
             delBtn=delButton()
             delBtn.clicked.connect(lambda _,b=delBtn: self.delTask(b))
-            self.tasks.setItem(row,0,QTableWidgetItem(objects.task))
+            self.tasks.setItem(row,0,QTableWidgetItem(objects.title))
             self.tasks.setItem(row,1,QTableWidgetItem(objects.status))
             self.tasks.setCellWidget(row,2,doneBtn)
             self.tasks.setCellWidget(row,3,delBtn)
 
     def reloadDonePage(self):
         self.completedTask.setRowCount(0)
-        completedTasks=sql.loadTasks(table='completed')
+        completedTasks=sql.loadCompletedTasks()
         for row,results in enumerate(completedTasks):
             self.completedTask.insertRow(row)
             undoBtn=undoButton() 
             
             delBtn=delButton()
-            delBtn.clicked.connect(lambda _,b=delBtn: self.delTask(b))                            #implement undo method
-            self.completedTask.setItem(row,0,QTableWidgetItem(results.task))
+            delBtn.clicked.connect(lambda _,b=delBtn: self.delTask(b,self.completedTask))                            #implement undo method
+            self.completedTask.setItem(row,0,QTableWidgetItem(results.task.title))
             self.completedTask.setCellWidget(row,1,undoBtn)
             self.completedTask.setCellWidget(row,2,delBtn)
 
@@ -165,7 +165,7 @@ class MainWindow(QMainWindow):
         completeBtn.clicked.connect(lambda _,b=completeBtn: self.taskCompleted(b))
 
         delBtn=delButton()
-        delBtn.clicked.connect(lambda _,b=delBtn: self.delTask(b,'tasks'))
+        delBtn.clicked.connect(lambda _,b=delBtn: self.delTask(b))
 
         if task:
             sql.addTask(task,status)
@@ -188,26 +188,31 @@ class MainWindow(QMainWindow):
 
         self.counter+=1
 
-    def delTask(self,button):              #implement deletion in sql
-        row=self.tasks.indexAt(button.pos()).row()
+    def delTask(self,button,table=None):              #implement deletion in sql
+        tbClass=table or self.tasks
+        row=tbClass.indexAt(button.pos()).row()
         if row!=-1:
-            title=self.tasks.item(row,0).text().strip()
-            sql.delTask('alltasks',title)
-            self.tasks.removeRow(row)
+            title=tbClass.item(row,0).text().strip()
+            sql.delTask(title)
+            self.reloadDonePage()
+            self.reloadViewPage()            
 
     def taskCompleted(self,button):        
         row=self.tasks.indexAt(button.pos()).row()
         newRow=self.completedTask.rowCount()
         self.completedTask.insertRow(newRow)
 
+        self.tasks.setItem(row,1,QTableWidgetItem('completed'))
+
         undoBtn=undoButton()
         undoBtn.clicked.connect(lambda _,b=undoBtn: self.undoCompletion(b))
 
         delBtn=delButton()
-        delBtn.clicked.connect(lambda _,b=delBtn: self.delTask(b))
+        delBtn.clicked.connect(lambda _,b=delBtn: self.delTask(b,self.completedTask))
 
         item=self.tasks.item(row,0)
         if item:
+            sql.markCompleted(item.text())
             self.completedTask.setItem(newRow,0,QTableWidgetItem(item.text()))
             self.completedTask.setCellWidget(newRow,1,undoBtn) 
             self.completedTask.setCellWidget(newRow,2,delBtn)   
@@ -217,21 +222,17 @@ class MainWindow(QMainWindow):
     def undoCompletion(self,button):                               #implement undo mechanism in sql
 
         row=self.completedTask.indexAt(button.pos()).row()
-        newRow=self.tasks.rowCount()
 
-        completeBtn=compile()
-        completeBtn.clicked.connect(lambda _,r=newRow: self.taskCompleted(r))
+        completeBtn=doneButton()
+        completeBtn.clicked.connect(lambda _,b=completeBtn: self.taskCompleted(b))
 
         delBtn=delButton()
         delBtn.clicked.connect(lambda _,b=delBtn: self.delTask(b))
-        self.tasks.insertRow(newRow)
 
-        task=self.completedTask.takeItem(row,0)
+        self.tasks.setItem(row,1,QTableWidgetItem("incomplete"))
 
-        self.tasks.setItem(newRow,0,task)
-        self.tasks.setItem(newRow,1,QTableWidgetItem("incomplete"))
-        self.tasks.setCellWidget(newRow,2,completeBtn)
-        self.tasks.setCellWidget(newRow,3,delBtn)
+        title=self.completedTask.item(row,0)
+        sql.undoTask(title.text())
 
         self.completedTask.removeRow(row)
 

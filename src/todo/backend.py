@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session,DeclarativeBase,Mapped,mapped_column
+from sqlalchemy.orm import Session,DeclarativeBase,Mapped,mapped_column,relationship,joinedload
 from sqlalchemy import create_engine,ForeignKey,select
 from pydantic import BaseModel
 from os import getenv
@@ -16,7 +16,7 @@ class viewStructure(BaseModel):
 
 class completedStructure(BaseModel):
     id: int
-    task: int
+    taskId: int
 
 dbUrl=getenv("dbUrl")
 try:
@@ -27,46 +27,61 @@ except:
 class Tasks(Base):
     __tablename__='tasks'
     id:Mapped[int]=mapped_column(primary_key=True)
-    task:Mapped[str]=mapped_column(nullable=False)
+    title:Mapped[str]=mapped_column(nullable=False)
     status:Mapped[str]=mapped_column(nullable=False)
+    completedTask=relationship('CompletedTasks',back_populates='task',
+                               cascade='all,delete-orphan',
+                               uselist=False)
 
 class CompletedTasks(Base):
     __tablename__="completedtasks"
     id:Mapped[int]=mapped_column(primary_key=True)
-    task:Mapped[str]=mapped_column(nullable=False)
+    taskId:Mapped[int]=mapped_column(ForeignKey('tasks.id',ondelete='CASCADE'),nullable=False,unique=True)
+    task=relationship('Tasks',back_populates="completedTask")
 
 Base.metadata.create_all(engine)
 
 
 def addTask(task,status):
-    taskObj=Tasks(task=task,status=status)
+    taskObj=Tasks(title=task,status=status)
     if taskObj:
         with Session(engine) as session:
             session.add(taskObj)
             session.commit()
 
-def markCompleted(task):
-    taskObj=CompletedTasks(task=task)
-    if taskObj:
-        with Session(engine) as session:
-            session.add(taskObj)
-            session.commit()
-
-def loadTasks(table):
-    if table.lower().strip()=='completed':
-        obj=CompletedTasks
-    elif table.lower().strip()=='alltasks':
-        obj=Tasks
+def markCompleted(title):
     with Session(engine) as session:
-        query=select(obj)
+        query=select(Tasks).where(Tasks.title==title)
+        taskObj=session.scalars(query).first()
+        taskObj.status='completed'
+        session.add(CompletedTasks(taskId=taskObj.id))
+        session.commit()
+
+def loadAllTasks():
+    with Session(engine) as session:
+        query=select(Tasks)
         return session.scalars(query).all()
 
-def delTask(table,title):
-    tbClass=Tasks if table.lower().strip()=='alltasks' else CompletedTasks
+def loadCompletedTasks():
+    with Session(engine) as session:
+        query=select(CompletedTasks).options(joinedload(CompletedTasks.task))
+        return session.scalars(query).all()
+
+def delTask(title):
 
     with Session(engine) as session:
-        query=select(tbClass).where(tbClass.task==title)
+        query=select(Tasks).where(Tasks.title==title)
         task=session.scalars(query).first()
         if task:
             session.delete(task)
+            session.commit()
+
+def undoTask(title):
+    with Session(engine) as session:
+        query=select(Tasks).where(Tasks.title==title)
+        task=session.scalars(query).first()
+        if task:
+            task.status='incomplete'
+            completedTask=task.completedTask
+            session.delete(completedTask)
             session.commit()
