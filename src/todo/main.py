@@ -98,9 +98,17 @@ class MainWindow(QMainWindow):
             self.completedTask.setCellWidget(row,1,undoBtn)
             self.completedTask.setCellWidget(row,2,delBtn)
 
+    def reloadIncTasks(self):
+        result=sql.loadIncTasks()
+        self.incTasks.setRowCount(0)
+        for row,object in enumerate(result):
+            self.incTasks.insertRow(row)
+            self.incTasks.setItem(row,0,QTableWidgetItem(object.title))
+            self.incTasks.setItem(row,1,QTableWidgetItem(object.status))
+
     def createPage(self):
         createWidget=QWidget()
-        layout=QVBoxLayout(createWidget)
+        createLayout=QVBoxLayout(createWidget)
 
         self.input=QLineEdit()
         self.input.setPlaceholderText("Add Task")
@@ -108,11 +116,22 @@ class MainWindow(QMainWindow):
         button.clicked.connect(self.addTask)
         self.input.returnPressed.connect(self.addTask)
 
-        layout.addWidget(self.input)
-        layout.addWidget(button)
-        layout.addStretch()
+        createLayout.addWidget(self.input)
+        createLayout.addWidget(button)
 
+        self.incTasks=QTableWidget(0,2)
+        self.incTasks.setHorizontalHeaderLabels(['Tasks','Status'])
+        headers=self.incTasks.horizontalHeader()
+        headers.setSectionResizeMode(0,QHeaderView.ResizeMode.Stretch)
+        headers.setSectionResizeMode(1,QHeaderView.ResizeMode.ResizeToContents)
+        self.incTasks.setWordWrap(True)
+
+        createLayout.setContentsMargins(0,0,0,0)
+        createLayout.addWidget(QLabel("Incomplete Tasks"))
+        createLayout.addWidget(self.incTasks)
         self.pages.addWidget(createWidget)
+
+        self.reloadIncTasks()
 
     def viewPage(self):
         viewWidget=QWidget()
@@ -170,7 +189,15 @@ class MainWindow(QMainWindow):
         if task:
             sql.addTask(task,status)
             self.tasks.insertRow(row)
-            self.tasks.setItem(row,0,QTableWidgetItem(self.counter))
+            incRow=self.incTasks.rowCount()
+            self.incTasks.insertRow(incRow)
+            self.incTasks.setItem(
+                incRow,0,QTableWidgetItem(task)
+            )
+            self.incTasks.setItem(
+                incRow,1,QTableWidgetItem(status)
+            )
+
             self.tasks.setItem(
                 row,0,QTableWidgetItem(task)
             )
@@ -188,14 +215,15 @@ class MainWindow(QMainWindow):
 
         self.counter+=1
 
-    def delTask(self,button,table=None):              #implement deletion in sql
+    def delTask(self,button,table=None):      
         tbClass=table or self.tasks
         row=tbClass.indexAt(button.pos()).row()
         if row!=-1:
             title=tbClass.item(row,0).text().strip()
             sql.delTask(title)
             self.reloadDonePage()
-            self.reloadViewPage()            
+            self.reloadViewPage()   
+        self.reloadIncTasks()         
 
     def taskCompleted(self,button):        
         row=self.tasks.indexAt(button.pos()).row()
@@ -215,7 +243,8 @@ class MainWindow(QMainWindow):
             sql.markCompleted(item.text())
             self.completedTask.setItem(newRow,0,QTableWidgetItem(item.text()))
             self.completedTask.setCellWidget(newRow,1,undoBtn) 
-            self.completedTask.setCellWidget(newRow,2,delBtn)   
+            self.completedTask.setCellWidget(newRow,2,delBtn)
+        self.reloadIncTasks()   
 
  
 
@@ -235,6 +264,7 @@ class MainWindow(QMainWindow):
         sql.undoTask(title.text())
 
         self.completedTask.removeRow(row)
+        self.reloadIncTasks()
 
 
 app=QApplication(sys.argv)

@@ -85,3 +85,8 @@ def undoTask(title):
             completedTask=task.completedTask
             session.delete(completedTask)
             session.commit()
+
+def loadIncTasks():
+    with Session(engine) as session:
+        query=select(Tasks).where(Tasks.status=='incomplete')
+        return session.scalars(query).all()
