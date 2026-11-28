@@ -77,7 +77,9 @@ class MainWindow(QMainWindow):
         for row,objects in enumerate(allTasks):
             self.tasks.insertRow(row)
             doneBtn=doneButton()
+            doneBtn.clicked.connect(lambda _,b=doneBtn: self.taskCompleted(b))
             delBtn=delButton()
+            delBtn.clicked.connect(lambda _,b=delBtn: self.delTask(b))
             self.tasks.setItem(row,0,QTableWidgetItem(objects.task))
             self.tasks.setItem(row,1,QTableWidgetItem(objects.status))
             self.tasks.setCellWidget(row,2,doneBtn)
@@ -88,9 +90,13 @@ class MainWindow(QMainWindow):
         completedTasks=sql.loadTasks(table='completed')
         for row,results in enumerate(completedTasks):
             self.completedTask.insertRow(row)
-            undoBtn=undoButton()
+            undoBtn=undoButton() 
+            
+            delBtn=delButton()
+            delBtn.clicked.connect(lambda _,b=delBtn: self.delTask(b))                            #implement undo method
             self.completedTask.setItem(row,0,QTableWidgetItem(results.task))
             self.completedTask.setCellWidget(row,1,undoBtn)
+            self.completedTask.setCellWidget(row,2,delBtn)
 
     def createPage(self):
         createWidget=QWidget()
@@ -135,12 +141,13 @@ class MainWindow(QMainWindow):
         doneLayout=QVBoxLayout(doneWidget)
         doneLayout.addWidget(QLabel("Completed Tasks"))
 
-        self.completedTask=QTableWidget(0,2)
-        self.completedTask.setHorizontalHeaderLabels(['Tasks',"Undo"])
+        self.completedTask=QTableWidget(0,3)
+        self.completedTask.setHorizontalHeaderLabels(['Tasks',"Undo",'Del'])
         headers=self.completedTask.horizontalHeader()
 
         headers.setSectionResizeMode(1,QHeaderView.ResizeMode.ResizeToContents)
         headers.setSectionResizeMode(0,QHeaderView.ResizeMode.Stretch)
+        headers.setSectionResizeMode(2,QHeaderView.ResizeMode.ResizeToContents)
 
         self.completedTask.setWordWrap(True)
 
@@ -158,7 +165,7 @@ class MainWindow(QMainWindow):
         completeBtn.clicked.connect(lambda _,b=completeBtn: self.taskCompleted(b))
 
         delBtn=delButton()
-        delBtn.clicked.connect(lambda _,b=delButton: self.delTask(b))
+        delBtn.clicked.connect(lambda _,b=delBtn: self.delTask(b,'tasks'))
 
         if task:
             sql.addTask(task,status)
@@ -184,6 +191,8 @@ class MainWindow(QMainWindow):
     def delTask(self,button):              #implement deletion in sql
         row=self.tasks.indexAt(button.pos()).row()
         if row!=-1:
+            title=self.tasks.item(row,0).text().strip()
+            sql.delTask('alltasks',title)
             self.tasks.removeRow(row)
 
     def taskCompleted(self,button):        
@@ -191,20 +200,17 @@ class MainWindow(QMainWindow):
         newRow=self.completedTask.rowCount()
         self.completedTask.insertRow(newRow)
 
-        undoButton=QPushButton()
-        undoIcon=str(self.iconPath+"/undo.svg")
-        undoButton.setIcon(QIcon(undoIcon))
-        undoButton.setIconSize(QSize(25,15))
-        undoButton.clicked.connect(lambda _,b=undoButton: self.undoCompletion(b))
+        undoBtn=undoButton()
+        undoBtn.clicked.connect(lambda _,b=undoBtn: self.undoCompletion(b))
+
+        delBtn=delButton()
+        delBtn.clicked.connect(lambda _,b=delBtn: self.delTask(b))
 
         item=self.tasks.item(row,0)
-        status=self.tasks.item(row,1)
-        if item and status.text().strip():
-            sql.markCompleted(item.text())
-            status.setText('completed')
-            self.completedTask.setItem(newRow,1,QTableWidgetItem("Completed"))  
+        if item:
             self.completedTask.setItem(newRow,0,QTableWidgetItem(item.text()))
-            self.completedTask.setCellWidget(newRow,2,undoButton)    
+            self.completedTask.setCellWidget(newRow,1,undoBtn) 
+            self.completedTask.setCellWidget(newRow,2,delBtn)   
 
  
 
@@ -213,25 +219,19 @@ class MainWindow(QMainWindow):
         row=self.completedTask.indexAt(button.pos()).row()
         newRow=self.tasks.rowCount()
 
-        completeButton=QPushButton()
-        icon=str(self.iconPath+"/markAsDone.svg")
-        completeButton.setIcon(QIcon(icon))
-        completeButton.setIconSize(QSize(25,15))
-        completeButton.clicked.connect(lambda _,r=newRow: self.taskCompleted(r))
+        completeBtn=compile()
+        completeBtn.clicked.connect(lambda _,r=newRow: self.taskCompleted(r))
 
-        delButton=QPushButton()
-        delIcon=str(self.iconPath+"/del.svg")
-        delButton.setIcon(QIcon(delIcon))
-        delButton.setIconSize(QSize(25,15))
-        delButton.clicked.connect(lambda _,r=newRow: self.tasks.removeRow(r))
+        delBtn=delButton()
+        delBtn.clicked.connect(lambda _,b=delBtn: self.delTask(b))
         self.tasks.insertRow(newRow)
 
         task=self.completedTask.takeItem(row,0)
 
         self.tasks.setItem(newRow,0,task)
         self.tasks.setItem(newRow,1,QTableWidgetItem("incomplete"))
-        self.tasks.setCellWidget(newRow,2,completeButton)
-        self.tasks.setCellWidget(newRow,3,delButton)
+        self.tasks.setCellWidget(newRow,2,completeBtn)
+        self.tasks.setCellWidget(newRow,3,delBtn)
 
         self.completedTask.removeRow(row)
 

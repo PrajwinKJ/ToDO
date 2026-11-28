@@ -60,3 +60,13 @@ def loadTasks(table):
     with Session(engine) as session:
         query=select(obj)
         return session.scalars(query).all()
+
+def delTask(table,title):
+    tbClass=Tasks if table.lower().strip()=='alltasks' else CompletedTasks
+
+    with Session(engine) as session:
+        query=select(tbClass).where(tbClass.task==title)
+        task=session.scalars(query).first()
+        if task:
+            session.delete(task)
+            session.commit()
